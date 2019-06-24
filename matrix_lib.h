@@ -17,16 +17,20 @@ template<typename T, T defaultValue>
 struct ColumnWrapper;
 template<typename T, T defaultValue>
 struct Matrix;
+template<typename T, T defaultValue>
+struct map_iterator;
 
+// Для запоминания строки и столбца.
 struct position
 {
 	int row;
 	int column;
 };
+// Обертка для значения матрицы, чтобы задать оперции индексирования, присваивания
+//хранит значение, ссылку на список всех значений матрицы, позицию в матрице.
 template<typename T, T defaultValue>
-struct ValueWrapper {
+class ValueWrapper {
 	using rowType = std::map<position, ValueWrapper<T, defaultValue>>;
-public:
 
 	void RemoveFromContainer() {
 		position p{ row, column };
@@ -36,41 +40,22 @@ public:
 	}
 
 	friend Matrix<T, defaultValue>;
+	friend map_iterator<T, defaultValue>;
 	ValueWrapper() = delete;
 	ValueWrapper(rowType &rowsRef) : rows{ rowsRef } {
 		value = defaultValue;
 		row = -1;
 		column = -1;
 	}
-	ValueWrapper(T val, const rowType &rowsRef, int rw, int col) :
-		value(val), rows(rowsRef), row(rw), column(col) {
 
-	}
-	ValueWrapper(const rowType &rowsRef, int rw, int col) :
-		value(defaultValue), rows(rowsRef), row(rw), column(col) {
-
-	}
-
-	void SetValue(const T &val) {
-		value = val;
-	}
-
-	T value;
-	rowType &rows;
-	int row;
-	int column;
-	//ValueWrapper<T, defaultValue> & operator=(const ValueWrapper<T, defaultValue>& other)= delete;
-	//ValueWrapper<T, defaultValue> & operator=(ValueWrapper<T, defaultValue>&& other)=delete;
-
-	friend Matrix<T, defaultValue>;
-	operator std::tuple<int, int, T>() { // copy assignment
+public:
+	// приведение к типу tuple.
+	operator std::tuple<int, int, T>() {
 
 		return std::make_tuple(this->row, this->column, this->value);
 	}
 
-
-
-	ValueWrapper<T, defaultValue> & operator=(const T& other) { // copy assignment
+	ValueWrapper<T, defaultValue> & operator=(const T& other) {
 
 		if (this->value != other) {
 			if (other!= defaultValue) {
@@ -82,7 +67,7 @@ public:
 					return *this;
 				}
 				else {
-					(*it).second.SetValue(other);
+					(*it).second.value = other;
 					return  (*it).second;
 				}
 			}
@@ -93,7 +78,7 @@ public:
 		return *this;
 	}
 
-	ValueWrapper<T, defaultValue> & operator=(T&& other) noexcept { // move assignment
+	ValueWrapper<T, defaultValue> & operator=(T&& other) noexcept {
 
 		if (this->value != other) {
 			if (other != defaultValue) {
@@ -117,7 +102,7 @@ public:
 		return *this;
 	}
 
-
+// Приведение  к типу T (тип значения матрицы)
 	operator T() const {
 		return value;
 	}
@@ -178,6 +163,11 @@ public:
 				//throw std::exception("incorrect operation!");
 				return *this;
 	}
+private:
+	T value;
+		rowType &rows;
+		int row;
+		int column;
 };
 template<typename T, T defaultValue>
 bool operator <  (const ValueWrapper<T, defaultValue> & lhs, const ValueWrapper<T, defaultValue> & rhs)
@@ -195,6 +185,8 @@ bool operator <  (const position lhs, const  position rhs)
 		return lhs.row < rhs.row;
 	}
 }
+
+// итератор для матрицы.
 template<typename T, T defaultValue>
 struct map_iterator : public std::iterator<std::bidirectional_iterator_tag, std::tuple<int, int, T>>
 {
@@ -251,11 +243,14 @@ private:
 	std::tuple<int, int, T> currentValue;
 };
 
-
+// разреженная матрица.
 template<typename T, T defaultValue>
 class Matrix {
 	using rowType = std::map<position, ValueWrapper<T, defaultValue>>;
+
+// схранит значения матрицы, ключем является прзиция.
 	rowType rows;
+// обертка для значений.
 	ValueWrapper<T, defaultValue> tempValue;
 public:
 	Matrix() :
