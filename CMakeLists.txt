@@ -5,7 +5,7 @@ find_package(Threads REQUIRED)
 find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 
 add_executable(matrix matrix.cpp)
-add_library(library matrix_lib.h)
+add_library(library matrix_lib.cpp)
 
 set_target_properties(matrix library PROPERTIES
 	CXXSTANDARD 17
