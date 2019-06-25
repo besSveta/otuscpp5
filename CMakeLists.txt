@@ -8,7 +8,7 @@ add_executable(matrix matrix.cpp)
 add_library(library matrixr_lib.cpp)
 add_executable(test_matrix test_matrix_lib.cpp)
 
-set_target_properties(matrix library test_test_matrix PROPERTIES
+set_target_properties(matrix library test_matrix PROPERTIES
 	CXXSTANDARD 17
 	CSS_STANDARD_REQUIRED ON
 	COMPILE_OPTIONS "-Wpedantic;-Wall;-Wextra"
