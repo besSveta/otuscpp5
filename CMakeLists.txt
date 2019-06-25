@@ -5,7 +5,7 @@ find_package(Threads REQUIRED)
 find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 
 add_executable(matrix matrix.cpp)
-add_library(library matrixr_lib.cpp)
+add_library(library matrix_lib.cpp)
 add_executable(test_matrix test_matrix_lib.cpp)
 
 set_target_properties(matrix library test_matrix PROPERTIES
