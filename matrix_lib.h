@@ -143,7 +143,7 @@ public:
 			throw "Incorrect Index";
 
 		}
-		if ((*rows) >= 0 && column >= 0) {
+		if (row >= 0 && column >= 0) {
 			position p { row, column };
 			if ((*rows).find(p) != (*rows).end()) {
 				return *this;
@@ -266,7 +266,7 @@ public:
 			throw "Incorrect Index";
 
 		}
-		ValueWrapper<T, defaultValue> val((*rowsPtr));
+		ValueWrapper<T, defaultValue> val(rowsPtr);
 		val.column = -1;
 		val.row = i;
 		return val;
