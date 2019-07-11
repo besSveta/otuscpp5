@@ -38,41 +38,21 @@ class ValueWrapper {
 	void RemoveFromContainer() {
 		position p { row, column };
 
-		if ((*rows).find(p) != (*rows).end()) {
-			(*rows).erase(p);
+		if (rows->find(p) != rows->end()) {
+			rows->erase(p);
 		}
 	}
 
 	friend Matrix<T, defaultValue> ;
 	friend matr_iterator<T, defaultValue> ;
 	ValueWrapper() = delete;
-	ValueWrapper(const std::shared_ptr<rowType<T, defaultValue>> &rowsRef) :
+	ValueWrapper(std::shared_ptr<rowType<T, defaultValue>> rowsRef) :
 			rows(rowsRef) {
 		value = defaultValue;
 		row = -1;
 		column = -1;
 	}
 
-	void SetValue(T&& other) {
-		if (this->value != other) {
-			if (other != defaultValue) {
-				value = other;
-				position p { row, column };
-
-				auto it = (*rows).find(p);
-				if (it == (*rows).end()) {
-					(*rows).insert(
-							std::pair<position, ValueWrapper<T, defaultValue>>(
-									p, *this));
-				} else {
-					(*it).second.value = other;
-				}
-			} else {
-				RemoveFromContainer();
-			}
-		}
-
-	}
 public:
 	// приведение к типу tuple.
 	operator std::tuple<int, int, T>() {
@@ -83,15 +63,23 @@ public:
 // присваивание, если присваиваем значение по умолчание, то удаляем из контейнера,
 //иначе добавляем или меняем уже имеющееся.
 	ValueWrapper<T, defaultValue> & operator=(const T &other) {
-		// похоже на костыль, но иначе получается копирование кода.. не знаю как тут обыграть.
-		auto a = other;
-		SetValue(std::forward<T>(a));
-		return *this;
-	}
+		if (this->value != other) {
+			if (other != defaultValue) {
+				value = other;
+				position p { row, column };
 
-	ValueWrapper<T, defaultValue> & operator=(T&& other) noexcept {
-
-		SetValue(std::forward<T>(other));
+				auto it = rows->find(p);
+				if (it == rows->end()) {
+					rows->insert(
+							std::pair<position, ValueWrapper<T, defaultValue>>(
+									p, *this));
+				} else {
+					it->second.value = other;
+				}
+			} else {
+				RemoveFromContainer();
+			}
+		}
 		return *this;
 	}
 
@@ -109,7 +97,7 @@ public:
 
 		if (row >= 0 && column >= 0) {
 			position p { row, column };
-			if ((*rows).find(p) != (*rows).end()) {
+			if (rows->find(p) != rows->end()) {
 				return *this;
 			}
 		}
@@ -122,10 +110,10 @@ public:
 		if (this->column == -1) {
 			this->column = i;
 			position p { row, column };
-			if ((*rows).begin() != (*rows).end()) {
-				auto it = (*rows).find(p);
-				if ((*rows).find(p) != (*rows).end()) {
-					return (*it).second;
+			if (rows->begin() != rows->end()) {
+				auto it = rows->find(p);
+				if (rows->find(p) != rows->end()) {
+					return it->second;
 				}
 			}
 
@@ -145,7 +133,7 @@ public:
 		}
 		if (row >= 0 && column >= 0) {
 			position p { row, column };
-			if ((*rows).find(p) != (*rows).end()) {
+			if (rows->find(p) != rows->end()) {
 				return *this;
 			}
 		}
@@ -187,10 +175,10 @@ public:
 
 	}
 	matr_iterator& operator++() {
-		auto it = (*rowsPtr).find(lastPosition);
-		if (it != (*rowsPtr).end()) {
+		auto it = rowsPtr->find(lastPosition);
+		if (it != rowsPtr->end()) {
 			it = std::next(it);
-			if (it != (*rowsPtr).end()) {
+			if (it != rowsPtr->end()) {
 				lastPosition = it->first;
 			} else
 				lastPosition = {-1,-1};
@@ -233,7 +221,7 @@ private:
 template<typename T, T defaultValue>
 class Matrix {
 
-// схранит значения матрицы, ключем является прзиция.
+// схранит значения матрицы, ключем является позиция.
 	std::shared_ptr<rowType<T, defaultValue>> rowsPtr;
 	// обертка для значений.
 	ValueWrapper<T, defaultValue> tempValue;
@@ -241,13 +229,12 @@ class Matrix {
 
 public:
 	Matrix() :
-			rowsPtr(std::make_shared<rowType<T, defaultValue>>()), tempValue(
-					rowsPtr) {
+			rowsPtr(std::make_shared<rowType<T, defaultValue>>()), tempValue(rowsPtr) {
 		fakePosition = position { -1, -1 };
 	}
 
 	std::size_t size() const {
-		return (*rowsPtr).size();
+		return rowsPtr->size();
 	}
 
 	ValueWrapper<T, defaultValue> & operator[](int i) {
@@ -273,8 +260,8 @@ public:
 	}
 
 	matr_iterator<T, defaultValue> begin() const {
-		if ((*rowsPtr).begin() != (*rowsPtr).end()) {
-			auto val = *(*rowsPtr).begin();
+		if (rowsPtr->begin() != rowsPtr->end()) {
+			auto val = *(rowsPtr->begin());
 			return matr_iterator<T, defaultValue>(rowsPtr, val.first);
 		}
 		return matr_iterator<T, defaultValue>(rowsPtr, fakePosition);
@@ -282,17 +269,21 @@ public:
 
 	matr_iterator<T, defaultValue> end() const {
 
-		if ((*rowsPtr).begin() != (*rowsPtr).end()) {
+		if (rowsPtr->begin() != rowsPtr->end()) {
 			return matr_iterator<T, defaultValue>(rowsPtr,
-					(*(*rowsPtr).rbegin()).first);
+					(rowsPtr->rbegin())->first);
 		}
 
 		return matr_iterator<T, defaultValue>(rowsPtr, fakePosition);
 	}
 
 	~Matrix() {
-		(*rowsPtr).clear();
+		rowsPtr->clear();
 		tempValue.rows = nullptr;
 	}
 
+Matrix(const Matrix<T, defaultValue>& other):
+		rowsPtr(other.rowsPtr),
+		tempValue(other.tempValue){
+	}
 };
