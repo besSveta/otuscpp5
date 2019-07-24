@@ -28,11 +28,11 @@ int main(int, char *[]) {
 
 	 std::cout<<mtrx.size()<<std::endl;
 
-	auto a = 123;
+	auto a = 125;
 	auto b = 456;
 	Matrix<int, 0> m;
 	m[1][5] = 123;
-	std::cout << m[1][5] << std::endl;
+
 	std::cout << "size = " << m.size() << std::endl;
 	std::cout << m[1][5] << std::endl;
 	std::cout << m[5][5] << std::endl;

@@ -1,6 +1,5 @@
 /*
  * matrix_lib.h
-
  *
  *  Created on: 24 июн. 2019 г.
  *      Author: sveta
@@ -36,16 +35,19 @@ template<typename T, T defaultValue>
 class ValueWrapper {
 
 	void RemoveFromContainer() {
+		std::shared_ptr<rowType<T, defaultValue>> sharedRows = rows.lock();
+		if (sharedRows == nullptr)
+			return;
 		position p { row, column };
-
-		if (rows->find(p) != rows->end()) {
-			rows->erase(p);
+		if (sharedRows->find(p) != sharedRows->end()) {
+			sharedRows->erase(p);
 		}
 	}
 
 	friend Matrix<T, defaultValue> ;
 	friend matr_iterator<T, defaultValue> ;
 	ValueWrapper() = delete;
+
 	ValueWrapper(std::shared_ptr<rowType<T, defaultValue>> rowsRef) :
 			rows(rowsRef) {
 		value = defaultValue;
@@ -63,16 +65,16 @@ public:
 // присваивание, если присваиваем значение по умолчание, то удаляем из контейнера,
 //иначе добавляем или меняем уже имеющееся.
 	ValueWrapper<T, defaultValue> & operator=(const T &other) {
+
 		if (this->value != other) {
 			if (other != defaultValue) {
 				value = other;
 				position p { row, column };
 
-				auto it = rows->find(p);
-				if (it == rows->end()) {
-					rows->insert(
-							std::pair<position, ValueWrapper<T, defaultValue>>(
-									p, *this));
+				std::shared_ptr<rowType<T, defaultValue>> sharedRows(rows);
+				auto it = sharedRows->find(p);
+				if (it == sharedRows->end()) {
+					sharedRows->insert(	std::pair<position, ValueWrapper<T, defaultValue>>(p, *this));
 				} else {
 					it->second.value = other;
 				}
@@ -95,35 +97,27 @@ public:
 
 		}
 
-		if (row >= 0 && column >= 0) {
-			position p { row, column };
-			if (rows->find(p) != rows->end()) {
-				return *this;
-			}
-		}
 
 		if (this->row == -1) {
 			this->row = i;
-
+			return *this;
 		}
 
 		if (this->column == -1) {
 			this->column = i;
-			position p { row, column };
-			if (rows->begin() != rows->end()) {
-				auto it = rows->find(p);
-				if (rows->find(p) != rows->end()) {
-					return it->second;
+
+		}
+
+		position p { row, column };
+		std::shared_ptr<rowType<T, defaultValue>> sharedRows = rows.lock();
+				if (sharedRows!=nullptr && sharedRows->begin() != sharedRows->end()) {
+					auto it = sharedRows->find(p);
+					if (it != sharedRows->end()) {
+						return it->second;
+					}
 				}
-			}
-
-		}
-
-		if (this->value != defaultValue) {
-			this->value = defaultValue;
-		}
-		//throw std::exception("incorrect operation!");
-		return *this;
+				this->value = defaultValue;
+				return *this;
 	}
 	// Если матрица константная
 	const ValueWrapper<T, defaultValue> operator[](int i) const {
@@ -143,7 +137,7 @@ public:
 
 private:
 	T value;
-	std::shared_ptr<rowType<T, defaultValue>> rows;
+	std::weak_ptr<rowType<T, defaultValue>> rows;
 	int row;
 	int column;
 };
@@ -169,16 +163,17 @@ public:
 	using reference = T &;
 	using iterator_category = std::bidirectional_iterator_tag;
 	matr_iterator() = delete;
-	matr_iterator(const std::shared_ptr<rowType<T, defaultValue>> &rw,
+	matr_iterator(const std::weak_ptr<rowType<T, defaultValue>> &rw,
 			position pos) :
 			rowsPtr(rw), lastPosition(pos) {
 
 	}
 	matr_iterator& operator++() {
-		auto it = rowsPtr->find(lastPosition);
-		if (it != rowsPtr->end()) {
+		std::shared_ptr<rowType<T, defaultValue>> sharedRows(rowsPtr);
+		auto it = sharedRows->find(lastPosition);
+		if (it != sharedRows->end()) {
 			it = std::next(it);
-			if (it != rowsPtr->end()) {
+			if (it != sharedRows->end()) {
 				lastPosition = it->first;
 			} else
 				lastPosition = {-1,-1};
@@ -186,20 +181,30 @@ public:
 		return *this;
 	}
 	bool operator==(matr_iterator j) const {
-		auto t = (rowsPtr == j.rowsPtr
+		std::shared_ptr<rowType<T, defaultValue>> sharedRows = rowsPtr.lock();
+		std::shared_ptr<rowType<T, defaultValue>> otherRows = j.rowsPtr.lock();
+		if (sharedRows == nullptr) {
+			if (otherRows == nullptr)
+				return true;
+			else
+				return false;
+		}
+		if (otherRows == nullptr)
+			return false;
+
+		return (sharedRows == otherRows
 				&& lastPosition.column == j.lastPosition.column
 				&& lastPosition.row == j.lastPosition.row);
-		return t;
 	}
 	bool operator!=(matr_iterator j) const {
 		return !(*this == j);
 	}
 
 	std::tuple<int, int, T> GetValue() const {
-		auto rows = *rowsPtr;
-		auto it = rows.find(lastPosition);
+		std::shared_ptr<rowType<T, defaultValue>> sharedRows(rowsPtr);
+		auto it = sharedRows->find(lastPosition);
 		std::tuple<int, int, T> currentValue;
-		if (it == rows.end()) {
+		if (it == sharedRows->end()) {
 			currentValue = std::tuple<int, int, T>(-1, -1, defaultValue);
 		} else {
 			currentValue = std::tuple<int, int, T>(it->second.row,
@@ -213,7 +218,7 @@ public:
 	}
 
 private:
-	std::shared_ptr<rowType<T, defaultValue>> rowsPtr;
+	std::weak_ptr<rowType<T, defaultValue>> rowsPtr;
 	position lastPosition;
 };
 
@@ -228,12 +233,15 @@ class Matrix {
 	position fakePosition;
 
 public:
-	Matrix() :
-			rowsPtr(std::make_shared<rowType<T, defaultValue>>()), tempValue(rowsPtr) {
+
+	Matrix(): rowsPtr(std::make_shared<rowType<T, defaultValue>>()), tempValue(rowsPtr){
 		fakePosition = position { -1, -1 };
 	}
 
 	std::size_t size() const {
+		if (rowsPtr == nullptr) {
+			return 0;
+		}
 		return rowsPtr->size();
 	}
 
@@ -260,7 +268,7 @@ public:
 	}
 
 	matr_iterator<T, defaultValue> begin() const {
-		if (rowsPtr->begin() != rowsPtr->end()) {
+		if (rowsPtr != nullptr && rowsPtr->begin() != rowsPtr->end()) {
 			auto val = *(rowsPtr->begin());
 			return matr_iterator<T, defaultValue>(rowsPtr, val.first);
 		}
@@ -268,8 +276,7 @@ public:
 	}
 
 	matr_iterator<T, defaultValue> end() const {
-
-		if (rowsPtr->begin() != rowsPtr->end()) {
+		if (rowsPtr != nullptr && rowsPtr->begin() != rowsPtr->end()) {
 			return matr_iterator<T, defaultValue>(rowsPtr,
 					(rowsPtr->rbegin())->first);
 		}
@@ -277,13 +284,7 @@ public:
 		return matr_iterator<T, defaultValue>(rowsPtr, fakePosition);
 	}
 
-	~Matrix() {
-		rowsPtr->clear();
-		tempValue.rows = nullptr;
-	}
-
-Matrix(const Matrix<T, defaultValue>& other):
-		rowsPtr(other.rowsPtr),
-		tempValue(other.tempValue){
+	Matrix(const Matrix<T, defaultValue>& other) :
+			rowsPtr(other.rowsPtr), tempValue(other.tempValue) {
 	}
 };
