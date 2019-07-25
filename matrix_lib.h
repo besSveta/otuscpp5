@@ -16,7 +16,7 @@
 template<typename T, T defaultValue>
 struct ColumnWrapper;
 template<typename T, T defaultValue>
-struct Matrix;
+class Matrix;
 template<typename T, T defaultValue>
 struct matr_iterator;
 template<typename T, T defaultValue>
@@ -58,22 +58,25 @@ class ValueWrapper {
 public:
 	// приведение к типу tuple.
 	operator std::tuple<int, int, T>() {
-
+		if (row < 0 || column < 0) {
+			throw "Incorrect matrix value";
+		}
 		return std::make_tuple(this->row, this->column, this->value);
 	}
 
 // присваивание, если присваиваем значение по умолчание, то удаляем из контейнера,
 //иначе добавляем или меняем уже имеющееся.
 	ValueWrapper<T, defaultValue> & operator=(const T &other) {
-
+		if (row < 0 || column < 0) {
+			throw "Incorrect matrix value";
+		}
 		if (this->value != other) {
-			if (other != defaultValue) {
-				value = other;
+			if (other != defaultValue) {				
 				position p { row, column };
-
 				std::shared_ptr<rowType<T, defaultValue>> sharedRows(rows);
 				auto it = sharedRows->find(p);
 				if (it == sharedRows->end()) {
+					value = other;
 					sharedRows->insert(	std::pair<position, ValueWrapper<T, defaultValue>>(p, *this));
 				} else {
 					it->second.value = other;
@@ -94,12 +97,11 @@ public:
 	ValueWrapper<T, defaultValue> &operator[](int i) {
 		if (i < 0) {
 			throw "Incorrect Index";
-
 		}
-
 
 		if (this->row == -1) {
 			this->row = i;
+			this->value = defaultValue;
 			return *this;
 		}
 
@@ -123,16 +125,16 @@ public:
 	const ValueWrapper<T, defaultValue> operator[](int i) const {
 		if (i < 0) {
 			throw "Incorrect Index";
-
 		}
-		if (row >= 0 && column >= 0) {
+		std::shared_ptr<rowType<T, defaultValue>> sharedRows(rows);
+		if (sharedRows >= 0 && column >= 0) {
 			position p { row, column };
-			if (rows->find(p) != rows->end()) {
+			if (sharedRows->find(p) != sharedRows->end()) {
 				return *this;
 			}
 		}
 
-		return ValueWrapper(this->rows);
+		return ValueWrapper(sharedRows);
 	}
 
 private:
@@ -183,14 +185,11 @@ public:
 	bool operator==(matr_iterator j) const {
 		std::shared_ptr<rowType<T, defaultValue>> sharedRows = rowsPtr.lock();
 		std::shared_ptr<rowType<T, defaultValue>> otherRows = j.rowsPtr.lock();
-		if (sharedRows == nullptr) {
-			if (otherRows == nullptr)
-				return true;
-			else
+		if (sharedRows != otherRows) {
 				return false;
 		}
-		if (otherRows == nullptr)
-			return false;
+		if (sharedRows == nullptr)
+			return true;
 
 		return (sharedRows == otherRows
 				&& lastPosition.column == j.lastPosition.column
@@ -248,7 +247,6 @@ public:
 	ValueWrapper<T, defaultValue> & operator[](int i) {
 		if (i < 0) {
 			throw "Incorrect Index";
-
 		}
 		tempValue.column = -1;
 		tempValue.row = i;
