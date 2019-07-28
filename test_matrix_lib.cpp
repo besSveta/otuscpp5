@@ -28,12 +28,6 @@ BOOST_AUTO_TEST_CASE(matrix_test_case)
 	BOOST_REQUIRE_EQUAL(mtrx.size(),n-1);
 }
 
-BOOST_AUTO_TEST_CASE(const_matrix_test_case)
-{
-	const Matrix<int, 5> mtrx;
-
-	BOOST_REQUIRE_EQUAL(mtrx[5][2], 5);
-}
 
 
 BOOST_AUTO_TEST_SUITE_END()

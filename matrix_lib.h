@@ -16,7 +16,7 @@
 template<typename T, T defaultValue>
 struct ColumnWrapper;
 template<typename T, T defaultValue>
-class Matrix;
+struct Matrix;
 template<typename T, T defaultValue>
 struct matr_iterator;
 template<typename T, T defaultValue>
@@ -28,7 +28,7 @@ struct position {
 	int column;
 };
 template<typename T, T defaultValue>
-using rowType = std::map<position, ValueWrapper<T, defaultValue>>;
+using rowType = std::map<position, T>;
 // Обертка для значения матрицы, чтобы задать оперции индексирования, присваивания
 //хранит значение, ссылку(адрес) на список всех значений матрицы, позицию в матрице.
 template<typename T, T defaultValue>
@@ -50,95 +50,74 @@ class ValueWrapper {
 
 	ValueWrapper(std::shared_ptr<rowType<T, defaultValue>> rowsRef) :
 			rows(rowsRef) {
-		value = defaultValue;
 		row = -1;
 		column = -1;
+	}
+	T GetValue() const {
+		position p { row, column };
+		std::shared_ptr<rowType<T, defaultValue>> sharedRows(rows);
+		auto it = sharedRows->find(p);
+		if (it == sharedRows->end()) {
+			return defaultValue;
+		} else {
+			return it->second;
+		}
+
 	}
 
 public:
 	// приведение к типу tuple.
 	operator std::tuple<int, int, T>() {
-		if (row < 0 || column < 0) {
-			throw "Incorrect matrix value";
-		}
-		return std::make_tuple(this->row, this->column, this->value);
+		return std::make_tuple(this->row, this->column, GetValue());
 	}
 
 // присваивание, если присваиваем значение по умолчание, то удаляем из контейнера,
 //иначе добавляем или меняем уже имеющееся.
 	ValueWrapper<T, defaultValue> & operator=(const T &other) {
-		if (row < 0 || column < 0) {
-			throw "Incorrect matrix value";
+		if (!(row >= 0 && column >= 0)) {
+			throw "Incorrect operation";
+
 		}
-		if (this->value != other) {
-			if (other != defaultValue) {				
-				position p { row, column };
-				std::shared_ptr<rowType<T, defaultValue>> sharedRows(rows);
-				auto it = sharedRows->find(p);
-				if (it == sharedRows->end()) {
-					value = other;
-					sharedRows->insert(	std::pair<position, ValueWrapper<T, defaultValue>>(p, *this));
-				} else {
-					it->second.value = other;
-				}
+		if (other != defaultValue) {
+			position p { row, column };
+			std::shared_ptr<rowType<T, defaultValue>> sharedRows(rows);
+			auto it = sharedRows->find(p);
+			if (it == sharedRows->end()) {
+				sharedRows->insert(std::pair<position, T>(p, other));
 			} else {
-				RemoveFromContainer();
+				it->second = other;
 			}
+		} else {
+			RemoveFromContainer();
 		}
 		return *this;
 	}
 
 // Приведение  к типу T (тип значения матрицы)
 	operator T() const {
+		auto value = GetValue();
 		return value;
 	}
-// получение по индексу, проверяем сначала строки, потом столбцы, если есть такие позиции,
-	//возвращаем значение из матрицы, если  нет, то возвращаем новый ValueWrapper.
+// запоминаем индекс для получения в дальнейшем значений
 	ValueWrapper<T, defaultValue> &operator[](int i) {
 		if (i < 0) {
 			throw "Incorrect Index";
+
 		}
 
 		if (this->row == -1) {
 			this->row = i;
-			this->value = defaultValue;
 			return *this;
 		}
 
 		if (this->column == -1) {
 			this->column = i;
-
 		}
 
-		position p { row, column };
-		std::shared_ptr<rowType<T, defaultValue>> sharedRows = rows.lock();
-				if (sharedRows!=nullptr && sharedRows->begin() != sharedRows->end()) {
-					auto it = sharedRows->find(p);
-					if (it != sharedRows->end()) {
-						return it->second;
-					}
-				}
-				this->value = defaultValue;
-				return *this;
-	}
-	// Если матрица константная
-	const ValueWrapper<T, defaultValue> operator[](int i) const {
-		if (i < 0) {
-			throw "Incorrect Index";
-		}
-		std::shared_ptr<rowType<T, defaultValue>> sharedRows(rows);
-		if (sharedRows >= 0 && column >= 0) {
-			position p { row, column };
-			if (sharedRows->find(p) != sharedRows->end()) {
-				return *this;
-			}
-		}
-
-		return ValueWrapper(sharedRows);
+		return *this;
 	}
 
 private:
-	T value;
 	std::weak_ptr<rowType<T, defaultValue>> rows;
 	int row;
 	int column;
@@ -146,7 +125,8 @@ private:
 template<typename T, T defaultValue>
 bool operator <(const ValueWrapper<T, defaultValue> & lhs,
 		const ValueWrapper<T, defaultValue> & rhs) {
-	return lhs.value < rhs.value;
+
+	return (T) lhs < (T) rhs;
 }
 
 bool operator <(const position lhs, const position rhs) {
@@ -166,34 +146,28 @@ public:
 	using iterator_category = std::bidirectional_iterator_tag;
 	matr_iterator() = delete;
 	matr_iterator(const std::weak_ptr<rowType<T, defaultValue>> &rw,
-			position pos) :
+			typename std::map<position, T>::iterator pos) :
 			rowsPtr(rw), lastPosition(pos) {
 
 	}
 	matr_iterator& operator++() {
 		std::shared_ptr<rowType<T, defaultValue>> sharedRows(rowsPtr);
-		auto it = sharedRows->find(lastPosition);
-		if (it != sharedRows->end()) {
-			it = std::next(it);
-			if (it != sharedRows->end()) {
-				lastPosition = it->first;
-			} else
-				lastPosition = {-1,-1};
-			}
+		lastPosition++;
 		return *this;
 	}
 	bool operator==(matr_iterator j) const {
 		std::shared_ptr<rowType<T, defaultValue>> sharedRows = rowsPtr.lock();
 		std::shared_ptr<rowType<T, defaultValue>> otherRows = j.rowsPtr.lock();
-		if (sharedRows != otherRows) {
+		if (sharedRows == nullptr) {
+			if (otherRows == nullptr)
+				return true;
+			else
 				return false;
 		}
-		if (sharedRows == nullptr)
-			return true;
+		if (otherRows == nullptr)
+			return false;
 
-		return (sharedRows == otherRows
-				&& lastPosition.column == j.lastPosition.column
-				&& lastPosition.row == j.lastPosition.row);
+		return (sharedRows == otherRows && lastPosition == j.lastPosition);
 	}
 	bool operator!=(matr_iterator j) const {
 		return !(*this == j);
@@ -201,13 +175,12 @@ public:
 
 	std::tuple<int, int, T> GetValue() const {
 		std::shared_ptr<rowType<T, defaultValue>> sharedRows(rowsPtr);
-		auto it = sharedRows->find(lastPosition);
 		std::tuple<int, int, T> currentValue;
-		if (it == sharedRows->end()) {
+		if (lastPosition == sharedRows->end()) {
 			currentValue = std::tuple<int, int, T>(-1, -1, defaultValue);
 		} else {
-			currentValue = std::tuple<int, int, T>(it->second.row,
-					it->second.column, it->second.value);
+			currentValue = std::tuple<int, int, T>(lastPosition->first.row,
+					lastPosition->first.column, lastPosition->second);
 		}
 		return currentValue;
 	}
@@ -218,7 +191,7 @@ public:
 
 private:
 	std::weak_ptr<rowType<T, defaultValue>> rowsPtr;
-	position lastPosition;
+	typename std::map<position, T>::iterator lastPosition;
 };
 
 // разреженная матрица.
@@ -233,7 +206,9 @@ class Matrix {
 
 public:
 
-	Matrix(): rowsPtr(std::make_shared<rowType<T, defaultValue>>()), tempValue(rowsPtr){
+	Matrix() :
+			rowsPtr(std::make_shared<rowType<T, defaultValue>>()), tempValue(
+					rowsPtr) {
 		fakePosition = position { -1, -1 };
 	}
 
@@ -247,6 +222,7 @@ public:
 	ValueWrapper<T, defaultValue> & operator[](int i) {
 		if (i < 0) {
 			throw "Incorrect Index";
+
 		}
 		tempValue.column = -1;
 		tempValue.row = i;
@@ -266,20 +242,11 @@ public:
 	}
 
 	matr_iterator<T, defaultValue> begin() const {
-		if (rowsPtr != nullptr && rowsPtr->begin() != rowsPtr->end()) {
-			auto val = *(rowsPtr->begin());
-			return matr_iterator<T, defaultValue>(rowsPtr, val.first);
-		}
-		return matr_iterator<T, defaultValue>(rowsPtr, fakePosition);
+		return matr_iterator<T, defaultValue>(rowsPtr, rowsPtr->begin());
 	}
 
 	matr_iterator<T, defaultValue> end() const {
-		if (rowsPtr != nullptr && rowsPtr->begin() != rowsPtr->end()) {
-			return matr_iterator<T, defaultValue>(rowsPtr,
-					(rowsPtr->rbegin())->first);
-		}
-
-		return matr_iterator<T, defaultValue>(rowsPtr, fakePosition);
+		return matr_iterator<T, defaultValue>(rowsPtr, rowsPtr->end());
 	}
 
 	Matrix(const Matrix<T, defaultValue>& other) :
